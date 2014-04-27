@@ -12,7 +12,7 @@ if(.Platform$OS.type=="windows"){
 
 level <- '_HH_' #two options household ('HH') and individual ('')
 relationship <- 'allVillageRelationships' #multiple options, see the documentation
-vilno <- 1
+vilno <- 60
 
 ### Load the adjacency matrix
 net <- read.csv(file=paste('./DiffusionOfMicrofinance/Data/1. Network Data/',
@@ -61,13 +61,21 @@ Gx <- as.matrix(net2)%*%x
 GGx <-  as.matrix(net2)%*%as.matrix(net2)%*%x
 
 data.list <- list(y=as.vector(y), #outcome
-                  z=as.matrix(cbind(x,Gx,GGx)), #instruments
+                  z=as.matrix(cbind(rep(1,length(y)),x,Gx,GGx)), #instruments
                   x=as.vector(Gy), #endogenous variable
-                  w=as.matrix(cbind(x,Gx)) #exogenous variable               
+                  w=as.matrix(cbind(rep(1,length(y)),x,Gx)) #exogenous variable               
                   )
 mcmc.list <- list(R=10000)
 
 ### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
 
 result <- rivGibbs(Data=data.list,Mcmc=mcmc.list)
+
+data.list <- list(y=as.vector(y), #outcome
+                  z=as.matrix(cbind(x,Gx,GGx)), #instruments
+                  x=as.vector(Gy), #endogenous variable
+                  w=as.matrix(cbind(x,Gx)) #exogenous variable               
+)
+mcmc.list <- list(R=10000)
+
 result2 <- rivDP(Data=data.list,Mcmc=mcmc.list)
