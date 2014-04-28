@@ -1,6 +1,7 @@
 #Clean the Data
 library(foreign)
 library(bayesm)
+library(foreach)
 #source("./TicToc.r")
 
 
@@ -13,6 +14,10 @@ if(.Platform$OS.type=="windows"){
 level <- '_HH_' #two options household ('HH') and individual ('')
 relationship <- 'allVillageRelationships' #multiple options, see the documentation
 vilno <- 60
+
+# Specify if traditional classroom style peer effects are desired
+classroom.style <- FALSE
+classroom.style.sub <- TRUE
 
 ### Load the adjacency matrix
 net <- read.csv(file=paste('./DiffusionOfMicrofinance/Data/1. Network Data/',
