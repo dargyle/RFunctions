@@ -2,6 +2,7 @@
 library(foreign)
 library(bayesm)
 library(foreach)
+library(plyr)
 #source("./TicToc.r")
 
 
@@ -17,17 +18,23 @@ vilno <- 60
 
 ### Load the control variables
 # May need to do some merging of controls from the individual level file
-controls <- read.dta('G:/Copy/MicrofinanceNetworks/DiffusionOfMicrofinance/Data/2. Demographics and Outcomes/household_characteristics.dta') 
+controls <- read.dta('./DiffusionOfMicrofinance/Data/DemographicsAndOutcomes/household_characteristics.dta') 
 
 ### Function that takes in a village number, a matrix of whole sample controls,
 ### a network level (household or individual), a type of network relatiosnhip,
 ### and some options about doing a traditional style analysis.
 ### Returns a list of relelvant data
 
-makeData <- function(vilno,controls,level,relationship,classroom.style=FALSE,remove.isolates=TRUE){
+makeData <- function(vilno,
+                     controls,
+                     level,
+                     relationship,
+                     classroom.style=FALSE,
+                     remove.isolates=TRUE,
+                     within.global=FALSE){
 ### Load the adjacency matrix
-net <- read.csv(file=paste('./DiffusionOfMicrofinance/Data/1. Network Data/',
-                           'Adjacency Matrices/adj_',
+net <- read.csv(file=paste('./DiffusionOfMicrofinance/Data/NetworkData/',
+                           'AdjacencyMatrices/adj_',
                            relationship,
                            level,
                            'vilno_',
@@ -37,8 +44,8 @@ net <- read.csv(file=paste('./DiffusionOfMicrofinance/Data/1. Network Data/',
                 header=FALSE)
 
 ### Load the ids and use as row/column names
-ids <- as.matrix(read.csv(file=paste('./DiffusionOfMicrofinance/Data/1. Network Data/',
-                                  'Adjacency Matrix Keys/key',
+ids <- as.matrix(read.csv(file=paste('./DiffusionOfMicrofinance/Data/NetworkData/',
+                                  'AdjacencyMatrixKeys/key',
                                   level,
                                   'vilno_',
                                   vilno,
@@ -49,7 +56,7 @@ ids <- as.matrix(read.csv(file=paste('./DiffusionOfMicrofinance/Data/1. Network 
 dimnames(net) <- list(ids,ids)
 
 ### Load the outcomes
-participation <- read.csv(file=paste('./DiffusionOfMicrofinance/Matlab Replication/India Networks/MF',
+participation <- read.csv(file=paste('./DiffusionOfMicrofinance/MatlabReplication/IndiaNetworks/MF',
                                      vilno,
                                      '.csv',
                                      sep=''),
@@ -81,16 +88,29 @@ Gy <- G%*%y
 Gx <- G%*%x
 GGx <-  G%*%G%*%x
 
-return(data.frame(vilno=vilno,ids=ids,y=y,Gy=Gy,x=x,Gx=Gx,GGx=GGx))
+if(within.global==TRUE){
+  n <- nrow(G)
+  within.trans <- (diag(n) - array(1/n,c(n,n)))
+  return(data.frame(vilno=vilno,
+                    ids=ids,
+                    y=within.trans%*%y,
+                    x=within.trans%*%x,
+                    Gy=within.trans%*%Gy,
+                    Gx=within.trans%*%Gx,
+                    GGx=within.trans%*%GGx))
+  } else {
+  return(data.frame(vilno=vilno,ids=ids,y=y,Gy=Gy,x=x,Gx=Gx,GGx=GGx))
+  }
 }
-
 # List the villages that had microfinance
 villages <- c(1,2,3,4,6,9,10,12,15,19,20,21,23,24,25,28,29,31,32,33,
               36,37,39,41,42,43,45,46,47,48,50,51,52,55,57,59,60,62,
               64,65,66,67,68,70,71,72,73,75,77)
 
+#villages <- 1:4
+
 ### Run some traditional analysis
-blah <- ldply(villages,makeData,controls=controls,level=level,relationship=relationship,classroom.style=TRUE)
+blah <- ldply(villages,makeData,controls=controls,level=level,relationship=relationship,classroom.style=TRUE,within.global=TRUE)
 
 data.list <- list(y=as.vector(blah$y), #outcome
                   z=as.matrix(cbind(rep(1,nrow(blah)),blah[,5:13])), #instruments
@@ -104,7 +124,7 @@ mcmc.list <- list(R=10000)
 result.trad <- rivGibbs(Data=data.list,Mcmc=mcmc.list)
 
 ### Run some inital network analysis
-blah <- ldply(villages,makeData,controls=controls,level=level,relationship=relationship,)
+blah <- ldply(villages,makeData,controls=controls,level=level,relationship=relationship,within.global=TRUE)
 
 data.list <- list(y=as.vector(blah$y), #outcome
                   z=as.matrix(cbind(rep(1,nrow(blah)),blah[,5:13])), #instruments
@@ -118,9 +138,9 @@ mcmc.list <- list(R=10000)
 result <- rivGibbs(Data=data.list,Mcmc=mcmc.list)
 
 data.list <- list(y=as.vector(blah$y), #outcome
-                  z=as.matrix(blah[,4:13]), #instruments
+                  z=as.matrix(blah[,5:13]), #instruments
                   x=as.vector(blah$Gy), #endogenous variable
-                  w=as.matrix(blah[,4:10]) #exogenous variable               
+                  w=as.matrix(blah[,5:10]) #exogenous variable               
 )
 mcmc.list <- list(R=10000)
 
