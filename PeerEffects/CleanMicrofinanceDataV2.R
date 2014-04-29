@@ -79,7 +79,7 @@ if(remove.isolates==TRUE){
 
 # Estimate using traditional model
 if(classroom.style==TRUE){ 
-  G.temp <- array(1/(nrow(G)-1),dim(G))
+  G.temp <- array(1/(nrow(G)),dim(G))
   diag(G.temp) <- 0
   G <- G.temp
 }
@@ -94,8 +94,8 @@ if(within.global==TRUE){
   return(data.frame(vilno=vilno,
                     ids=ids,
                     y=within.trans%*%y,
-                    x=within.trans%*%x,
                     Gy=within.trans%*%Gy,
+                    x=within.trans%*%x,
                     Gx=within.trans%*%Gx,
                     GGx=within.trans%*%GGx))
   } else {
@@ -103,19 +103,19 @@ if(within.global==TRUE){
   }
 }
 # List the villages that had microfinance
-villages <- c(1,2,3,4,6,9,10,12,15,19,20,21,23,24,25,28,29,31,32,33,
-              36,37,39,41,42,43,45,46,47,48,50,51,52,55,57,59,60,62,
-              64,65,66,67,68,70,71,72,73,75,77)
+# villages <- c(1,2,3,4,6,9,10,12,15,19,20,21,23,24,25,28,29,31,32,33,
+#               36,37,39,41,42,43,45,46,47,48,50,51,52,55,57,59,60,62,
+#               64,65,66,67,68,70,71,72,73,75,77)
 
-#villages <- 1:4
+villages <- 1:4
 
 ### Run some traditional analysis
-blah <- ldply(villages,makeData,controls=controls,level=level,relationship=relationship,classroom.style=TRUE,within.global=TRUE)
+blah <- ldply(villages,makeData,controls=controls,level=level,relationship=relationship,classroom.style=TRUE,within.global=FALSE)
 
 data.list <- list(y=as.vector(blah$y), #outcome
-                  z=as.matrix(cbind(rep(1,nrow(blah)),blah[,5:13])), #instruments
+                  z=as.matrix(blah[,5:13]), #instruments
                   x=as.vector(blah$Gy), #endogenous variable
-                  w=as.matrix(cbind(rep(1,nrow(blah)),blah[,5:10])) #exogenous variable               
+                  w=as.matrix(blah[,5:10]) #exogenous variable               
 )
 mcmc.list <- list(R=10000)
 
@@ -127,21 +127,14 @@ result.trad <- rivGibbs(Data=data.list,Mcmc=mcmc.list)
 blah <- ldply(villages,makeData,controls=controls,level=level,relationship=relationship,within.global=TRUE)
 
 data.list <- list(y=as.vector(blah$y), #outcome
-                  z=as.matrix(cbind(rep(1,nrow(blah)),blah[,5:13])), #instruments
-                  x=as.vector(blah$Gy), #endogenous variable
-                  w=as.matrix(cbind(rep(1,nrow(blah)),blah[,5:10])) #exogenous variable               
-                  )
-mcmc.list <- list(R=10000)
-
-### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
-
-result <- rivGibbs(Data=data.list,Mcmc=mcmc.list)
-
-data.list <- list(y=as.vector(blah$y), #outcome
                   z=as.matrix(blah[,5:13]), #instruments
                   x=as.vector(blah$Gy), #endogenous variable
                   w=as.matrix(blah[,5:10]) #exogenous variable               
 )
 mcmc.list <- list(R=10000)
+
+### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
+
+result <- rivGibbs(Data=data.list,Mcmc=mcmc.list)
 
 result2 <- rivDP(Data=data.list,Mcmc=mcmc.list)
