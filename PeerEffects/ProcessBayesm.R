@@ -1,4 +1,5 @@
 require(bayesm)
+require(texreg)
 
 mcmcIV <- setClass('mcmcIV',
                    slots = c(bayesm='list',

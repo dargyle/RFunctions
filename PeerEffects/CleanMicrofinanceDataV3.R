@@ -3,6 +3,7 @@ library(foreign)
 library(bayesm)
 library(foreach)
 library(plyr)
+require(texreg)
 #source("./TicToc.r")
 source(ProcessBayesm.r)
 
@@ -108,7 +109,7 @@ if(within.global==TRUE){
 #               36,37,39,41,42,43,45,46,47,48,50,51,52,55,57,59,60,62,
 #               64,65,66,67,68,70,71,72,73,75,77)
 
-villages <- c(1,19,32,42,48,77)
+villages <- c(1,19,48,77)
 
 ### Run some traditional analysis
 blah <- ldply(villages,
@@ -150,6 +151,61 @@ mcmc.list <- list(R=10000)
 result <- rivGibbs(Data=data.list,Mcmc=mcmc.list)
 
 result2 <- rivDP(Data=data.list,Mcmc=mcmc.list)
+
+mcmcIV <- setClass('mcmcIV',
+                   slots = c(bayesm='list',
+                             data.list='list'
+                   ),
+                   #contains = 'list'
+)
+
+### For now, only set up to report second stage
+### Create an extract function for an mcmc object
+extract.mcmcIV <- function(model){
+  require(coda)
+  # Process the data/results
+  bayesm <- attributes(model)$bayesm
+  
+  #Combine explanatory variable results
+  mcmc.model <- cbind(bayesm$beta,bayesm$gamma)
+  #Assign variable names
+  mcmc.names <- c('GY',colnames(attributes(model)$data.list$w))
+  colnames(mcmc.model) <- mcmc.names
+  
+  #Assign mcmc class
+  mcmc.model <- as.mcmc(mcmc.model)
+  mcmc.HPD <- HPDinterval(mcmc.model)
+  
+  s <- summary(mcmc.model)
+  names <- colnames(mcmc.model)
+  co <- s$statistics[,'Mean']
+  se <- s$statistics[,'SD']
+  ci.low <- mcmc.HPD[,"lower"]
+  ci.up <- mcmc.HPD[,"upper"]
+  
+  n <- length(attributes(model)$data.list$y) 
+  gof <- c(n)  
+  #In future include a model convergence test, predictions?
+  gof.names <- c('Num.\\ obs.')
+  gof.decimal <- c(FALSE)
+  
+  tr <- createTexreg(
+    coef.names = names,
+    coef = co,
+    se = se,
+    ci.low = ci.low,
+    ci.up = ci.up,
+    gof = gof,
+    gof.names = gof.names,
+    gof.decimal =gof.decimal
+  )
+  return(tr)
+}
+
+setMethod('extract',
+          signature = className('mcmcIV'),
+          definition = extract.mcmcIV)
+
 
 ### Make into a table
 model.trad <- mcmcIV(bayesm=result.trad,data.list=data.list)
