@@ -4,6 +4,7 @@ library(bayesm)
 library(foreach)
 library(plyr)
 #source("./TicToc.r")
+source(ProcessBayesm.R)
 
 
 if(.Platform$OS.type=="windows"){
@@ -107,10 +108,16 @@ if(within.global==TRUE){
 #               36,37,39,41,42,43,45,46,47,48,50,51,52,55,57,59,60,62,
 #               64,65,66,67,68,70,71,72,73,75,77)
 
-villages <- 1:4
+villages <- c(1,19,32,42,48,77)
 
 ### Run some traditional analysis
-blah <- ldply(villages,makeData,controls=controls,level=level,relationship=relationship,classroom.style=TRUE,within.global=FALSE)
+blah <- ldply(villages,
+              makeData,
+              controls=controls,
+              level=level,
+              relationship=relationship,
+              classroom.style=TRUE,
+              within.global=TRUE)
 
 data.list <- list(y=as.vector(blah$y), #outcome
                   z=as.matrix(blah[,5:13]), #instruments
@@ -124,7 +131,12 @@ mcmc.list <- list(R=10000)
 result.trad <- rivGibbs(Data=data.list,Mcmc=mcmc.list)
 
 ### Run some inital network analysis
-blah <- ldply(villages,makeData,controls=controls,level=level,relationship=relationship,within.global=TRUE)
+blah <- ldply(villages,
+              makeData,
+              controls=controls,
+              level=level,
+              relationship=relationship,
+              within.global=TRUE)
 
 data.list <- list(y=as.vector(blah$y), #outcome
                   z=as.matrix(blah[,5:13]), #instruments
@@ -138,3 +150,16 @@ mcmc.list <- list(R=10000)
 result <- rivGibbs(Data=data.list,Mcmc=mcmc.list)
 
 result2 <- rivDP(Data=data.list,Mcmc=mcmc.list)
+
+### Make into a table
+model.trad <- mcmcIV(bayesm=result.trad,data.list=data.list)
+model.trad.table <- extract(model.trad)
+
+model <- mcmcIV(bayesm=result,data.list=data.list)
+model.table <- extract(model)
+
+model.DP <- mcmcIV(bayesm=result2,data.list=data.list)
+model.DP.table <- extract(model.DP)
+
+screenreg(list(model.trad.table,model.table,model.DP.table),ci.force=TRUE)
+
