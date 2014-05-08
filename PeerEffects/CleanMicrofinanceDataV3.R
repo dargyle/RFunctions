@@ -15,8 +15,8 @@ if(.Platform$OS.type=="windows"){
 }
 
 level <- '_HH_' #two options household ('HH') and individual ('')
-relationship <- 'allVillageRelationships' #multiple options, see the documentation
-vilno <- 60
+relationship <- 'allVillageWeighted' #multiple options, see the documentation
+#vilno <- 60
 
 ### Load the control variables
 # May need to do some merging of controls from the individual level file
@@ -32,8 +32,9 @@ makeData <- function(vilno,
                      level,
                      relationship,
                      classroom.style=FALSE,
+                     within.global=FALSE,
                      remove.isolates=TRUE,
-                     within.global=FALSE){
+                     row.normalize=TRUE){
 ### Load the adjacency matrix
 net <- read.csv(file=paste('./DiffusionOfMicrofinance/Data/NetworkData/',
                            'AdjacencyMatrices/adj_',
@@ -79,6 +80,11 @@ if(remove.isolates==TRUE){
   x <- as.matrix(cbind(controls.net$hhSurveyed,controls.net$leader))
 }
 
+# Row Normalize the matix
+if(row.normalize==TRUE){
+  G <- G/rowSums(G)
+}
+
 # Estimate using traditional model
 if(classroom.style==TRUE){ 
   G.temp <- array(1/(nrow(G)),dim(G))
@@ -93,6 +99,7 @@ GGx <-  G%*%G%*%x
 if(within.global==TRUE){
   n <- nrow(G)
   within.trans <- (diag(n) - array(1/n,c(n,n)))
+  #within.trans <- (diag(n) - G)
   return(data.frame(vilno=vilno,
                     ids=ids,
                     y=within.trans%*%y,
@@ -217,5 +224,5 @@ model.table <- extract(model)
 model.DP <- mcmcIV(bayesm=result2,data.list=data.list)
 model.DP.table <- extract(model.DP)
 
-screenreg(list(model.trad.table,model.table,model.DP.table),ci.force=TRUE)
+screenreg(list(model.trad.table,model.table,model.DP.table),ci.force=TRUE,digits=3)
 
