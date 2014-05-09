@@ -112,9 +112,9 @@ if(within.global==TRUE){
   }
 }
 # List the villages that had microfinance
-# villages <- c(1,2,3,4,6,9,10,12,15,19,20,21,23,24,25,28,29,31,32,33,
-#               36,37,39,41,42,43,45,46,47,48,50,51,52,55,57,59,60,62,
-#               64,65,66,67,68,70,71,72,73,75,77)
+villages <- c(1,2,3,4,6,9,10,12,15,19,20,21,23,24,25,28,29,31,32,33,
+             36,37,39,41,42,43,45,46,47,48,50,51,52,55,57,59,60,62,
+             64,65,66,67,68,70,71,72,73,75,77)
 
 villages <- c(1,19,48,77)
 
@@ -127,10 +127,16 @@ blah <- ldply(villages,
               classroom.style=TRUE,
               within.global=TRUE)
 
-data.list <- list(y=as.vector(blah$y), #outcome
-                  z=as.matrix(blah[,5:13]), #instruments
-                  x=as.vector(blah$Gy), #endogenous variable
-                  w=as.matrix(blah[,5:10]) #exogenous variable               
+### Get column indices for the variables (^ indicates beginning of string, $ the end)
+y.index <- grep('^y$',colnames(blah))
+Gy.index <- grep('^Gy$',colnames(blah))
+z.index <- grep('x.',colnames(blah)) #Must include exogenous regressors with intstruments
+w.index <- grep('^G{0,1}x.',colnames(blah)) #Must leave out GGx terms
+
+data.list <- list(y=as.vector(blah[,y.index]), #outcome
+                  z=as.matrix(blah[,z.index]), #instruments
+                  x=as.vector(blah[,x.index]), #endogenous variable
+                  w=as.matrix(blah[,w.index]) #exogenous variable               
 )
 mcmc.list <- list(R=10000)
 
@@ -176,7 +182,7 @@ extract.mcmcIV <- function(model){
   #Combine explanatory variable results
   mcmc.model <- cbind(bayesm$beta,bayesm$gamma)
   #Assign variable names
-  mcmc.names <- c('GY',colnames(attributes(model)$data.list$w))
+  mcmc.names <- c('Gy',colnames(attributes(model)$data.list$w))
   colnames(mcmc.model) <- mcmc.names
   
   #Assign mcmc class
