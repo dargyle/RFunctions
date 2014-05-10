@@ -5,7 +5,7 @@ library(foreach)
 library(plyr)
 require(texreg)
 #source("./TicToc.r")
-source(ProcessBayesm.r)
+#source(ProcessBayesm.r)
 
 
 if(.Platform$OS.type=="windows"){
@@ -20,7 +20,8 @@ relationship <- 'allVillageWeighted' #multiple options, see the documentation
 
 ### Load the control variables
 # May need to do some merging of controls from the individual level file
-controls <- read.dta('./DiffusionOfMicrofinance/Data/DemographicsAndOutcomes/household_characteristics.dta') 
+controls <- read.dta('./DiffusionOfMicrofinance/Data/DemographicsAndOutcomes/household_characteristics2.dta') 
+controls.list <- c('leader','room_no','bed_no','hhSurveyed','noelectricity','nolatrine','GMorOBC')
 
 ### Function that takes in a village number, a matrix of whole sample controls,
 ### a network level (household or individual), a type of network relatiosnhip,
@@ -29,6 +30,7 @@ controls <- read.dta('./DiffusionOfMicrofinance/Data/DemographicsAndOutcomes/hou
 
 makeData <- function(vilno,
                      controls,
+                     controls.list,
                      level,
                      relationship,
                      classroom.style=FALSE,
@@ -65,7 +67,7 @@ participation <- read.csv(file=paste('./DiffusionOfMicrofinance/MatlabReplicatio
                                      sep=''),
                           header=FALSE)
 
-controls.net <- controls[controls$village==vilno,c('room_no','hhSurveyed','leader')]
+controls.net <- controls[controls$village==vilno,controls.list]
 
 #Remove Isolates
 if(remove.isolates==TRUE){
@@ -112,9 +114,9 @@ if(within.global==TRUE){
   }
 }
 # List the villages that had microfinance
-villages <- c(1,2,3,4,6,9,10,12,15,19,20,21,23,24,25,28,29,31,32,33,
-             36,37,39,41,42,43,45,46,47,48,50,51,52,55,57,59,60,62,
-             64,65,66,67,68,70,71,72,73,75,77)
+# villages <- c(1,2,3,4,6,9,10,12,15,19,20,21,23,24,25,28,29,31,32,33,
+#              36,37,39,41,42,43,45,46,47,48,50,51,52,55,57,59,60,62,
+#              64,65,66,67,68,70,71,72,73,75,77)
 
 villages <- c(1,19,48,77)
 
@@ -122,6 +124,7 @@ villages <- c(1,19,48,77)
 blah <- ldply(villages,
               makeData,
               controls=controls,
+              controls.list=controls.list,
               level=level,
               relationship=relationship,
               classroom.style=TRUE,
@@ -129,7 +132,7 @@ blah <- ldply(villages,
 
 ### Get column indices for the variables (^ indicates beginning of string, $ the end)
 y.index <- grep('^y$',colnames(blah))
-Gy.index <- grep('^Gy$',colnames(blah))
+x.index <- grep('^Gy$',colnames(blah))
 z.index <- grep('x.',colnames(blah)) #Must include exogenous regressors with intstruments
 w.index <- grep('^G{0,1}x.',colnames(blah)) #Must leave out GGx terms
 
@@ -148,14 +151,15 @@ result.trad <- rivGibbs(Data=data.list,Mcmc=mcmc.list)
 blah <- ldply(villages,
               makeData,
               controls=controls,
+              controls.list=controls.list,
               level=level,
               relationship=relationship,
               within.global=TRUE)
 
-data.list <- list(y=as.vector(blah$y), #outcome
-                  z=as.matrix(blah[,5:13]), #instruments
-                  x=as.vector(blah$Gy), #endogenous variable
-                  w=as.matrix(blah[,5:10]) #exogenous variable               
+data.list <- list(y=as.vector(blah[,y.index]), #outcome
+                  z=as.matrix(blah[,z.index]), #instruments
+                  x=as.vector(blah[,x.index]), #endogenous variable
+                  w=as.matrix(blah[,w.index]) #exogenous variable               
 )
 mcmc.list <- list(R=10000)
 
