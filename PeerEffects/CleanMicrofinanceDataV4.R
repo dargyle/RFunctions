@@ -15,8 +15,8 @@ if(.Platform$OS.type=="windows"){
 }
 
 level <- '_HH_' #two options household ('HH') and individual ('')
-relationship <- 'allVillageWeighted' #multiple options, see the documentation
-#vilno <- 60
+#relationship <- 'allVillageWeighted' #multiple options, see the documentation
+#relationship <- 'allVillageWeighted' #multiple options, see the documentation
 
 ### Load the control variables
 # May need to do some merging of controls from the individual level file
@@ -89,7 +89,7 @@ if(row.normalize==TRUE){
 
 # Estimate using traditional model
 if(classroom.style==TRUE){ 
-  G.temp <- array(1/(nrow(G)),dim(G))
+  G.temp <- array(1/(nrow(G)-1),dim(G))
   diag(G.temp) <- 0
   G <- G.temp
 }
@@ -113,62 +113,83 @@ if(within.global==TRUE){
   return(data.frame(vilno=vilno,ids=ids,y=y,Gy=Gy,x=x,Gx=Gx,GGx=GGx))
   }
 }
-# List the villages that had microfinance
-# villages <- c(1,2,3,4,6,9,10,12,15,19,20,21,23,24,25,28,29,31,32,33,
-#              36,37,39,41,42,43,45,46,47,48,50,51,52,55,57,59,60,62,
-#              64,65,66,67,68,70,71,72,73,75,77)
 
-villages <- c(1,19,48,77)
-
-### Run some traditional analysis
-blah <- ldply(villages,
-              makeData,
-              controls=controls,
-              controls.list=controls.list,
-              level=level,
-              relationship=relationship,
-              classroom.style=TRUE,
-              within.global=FALSE)
-
+makeDataList <- function(blah,DP=FALSE){
 ### Get column indices for the variables (^ indicates beginning of string, $ the end)
 y.index <- grep('^y$',colnames(blah))
 x.index <- grep('^Gy$',colnames(blah))
 z.index <- grep('x.',colnames(blah)) #Must include exogenous regressors with intstruments
 w.index <- grep('^G{0,1}x.',colnames(blah)) #Must leave out GGx terms
 
+if(DP==TRUE){
 data.list <- list(y=as.vector(blah[,y.index]), #outcome
                   z=as.matrix(blah[,z.index]), #instruments
                   x=as.vector(blah[,x.index]), #endogenous variable
                   w=as.matrix(blah[,w.index]) #exogenous variable               
 )
+} else {
+  data.list <- list(y=as.vector(blah[,y.index]), #outcome
+                    z=as.matrix(cbind(blah[,z.index],cons=1)), #instruments
+                    x=as.vector(blah[,x.index]), #endogenous variable
+                    w=as.matrix(cbind(blah[,w.index],cons=1)) #exogenous variable  
+  )
+}
+return(data.list)
+}
 
+# List the villages that had microfinance
+villages <- c(1,2,3,4,6,9,10,12,15,19,20,21,23,24,25,28,29,31,32,33,
+             36,37,39,41,42,43,45,46,47,48,50,51,52,55,57,59,60,62,
+             64,65,66,67,68,70,71,72,73,75,77)
+
+# villages <- c(1,19,48,77)
 mcmc.list <- list(R=10000)
 
-### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
-
-result.trad <- rivGibbs(Data=data.list,Mcmc=mcmc.list)
-
-### Run some inital network analysis
-blah <- ldply(villages,
-              makeData,
-              controls=controls,
-              controls.list=controls.list,
-              level=level,
-              relationship=relationship,
-              within.global=TRUE)
-
-data.list <- list(y=as.vector(blah[,y.index]), #outcome
-                  z=as.matrix(blah[,z.index]), #instruments
-                  x=as.vector(blah[,x.index]), #endogenous variable
-                  w=as.matrix(blah[,w.index]) #exogenous variable               
-)
-mcmc.list <- list(R=10000)
+### Run some traditional analysis
+trad.data.matrix <- ldply(villages,
+                          makeData,
+                          controls=controls,
+                          controls.list=controls.list,
+                          level=level,
+                          relationship='allVillageRelationships',
+                          classroom.style=TRUE,
+                          within.global=FALSE,
+                          row.normalize=TRUE)
 
 ### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
+trad.data.list <- makeDataList(trad.data.matrix,DP=FALSE)
+result.trad <- rivGibbs(Data=trad.data.list,Mcmc=mcmc.list)
 
-result <- rivGibbs(Data=data.list,Mcmc=mcmc.list)
+### Run some traditional analysis
+binary.data.matrix <- ldply(villages,
+                          makeData,
+                          controls=controls,
+                          controls.list=controls.list,
+                          level=level,
+                          relationship='allVillageRelationships',
+                          classroom.style=FALSE,
+                          within.global=FALSE,
+                          row.normalize=TRUE)
 
-result2 <- rivDP(Data=data.list,Mcmc=mcmc.list)
+### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
+binary.data.list <- makeDataList(binary.data.matrix,DP=FALSE)
+result.binary <- rivGibbs(Data=binary.data.list,Mcmc=mcmc.list)
+
+### Run some traditional analysis
+weighted.data.matrix <- ldply(villages,
+                            makeData,
+                            controls=controls,
+                            controls.list=controls.list,
+                            level=level,
+                            relationship='allVillageWeighted',
+                            classroom.style=FALSE,
+                            within.global=FALSE,
+                            row.normalize=TRUE)
+
+### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
+weighted.data.list <- makeDataList(weighted.data.matrix,DP=FALSE)
+result.weighted <- rivGibbs(Data=weighted.data.list,Mcmc=mcmc.list)
+
 
 mcmcIV <- setClass('mcmcIV',
                    slots = c(bayesm='list',
@@ -224,16 +245,15 @@ setMethod('extract',
           signature = className('mcmcIV'),
           definition = extract.mcmcIV)
 
-
 ### Make into a table
-model.trad <- mcmcIV(bayesm=result.trad,data.list=data.list)
+model.trad <- mcmcIV(bayesm=result.trad,data.list=trad.data.list)
 model.trad.table <- extract(model.trad)
 
-model <- mcmcIV(bayesm=result,data.list=data.list)
-model.table <- extract(model)
+model.binary <- mcmcIV(bayesm=result.binary,data.list=binary.data.list)
+model.binary.table <- extract(model.binary)
 
-model.DP <- mcmcIV(bayesm=result2,data.list=data.list)
-model.DP.table <- extract(model.DP)
+model.weighted <- mcmcIV(bayesm=result.weighted,data.list=weighted.data.list)
+model.weighted.table <- extract(model.weighted)
 
-screenreg(list(model.trad.table,model.table,model.DP.table),ci.force=TRUE,digits=3)
+screenreg(list(model.trad.table,model.binary.table,model.weighted.table),ci.force=TRUE,digits=3)
 
