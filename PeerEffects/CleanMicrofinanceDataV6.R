@@ -6,7 +6,7 @@ library(foreach)
 library(plyr)
 require(texreg)
 require(AER)
-#source("./TicToc.r")
+source("./TicToc.r")
 #source(ProcessBayesm.r)
 
 
