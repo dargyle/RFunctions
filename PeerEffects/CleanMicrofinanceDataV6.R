@@ -1,5 +1,6 @@
 #Clean the Data
 library(foreign)
+library(doSNOW)
 library(bayesm)
 library(foreach)
 library(plyr)
@@ -17,7 +18,7 @@ if(.Platform$OS.type=="windows"){
 
 level <- '_HH_' #two options household ('HH') and individual ('')
 #relationship <- 'allVillageWeighted' #multiple options, see the documentation
-#relationship <- 'allVillageWeighted' #multiple options, see the documentation
+relationship <- 'allVillageRelationships' #multiple options, see the documentation
 
 ### Load the control variables
 # May need to do some merging of controls from the individual level file
@@ -69,6 +70,7 @@ participation <- read.csv(file=paste('./DiffusionOfMicrofinance/MatlabReplicatio
                           header=FALSE)
 
 controls.net <- controls[controls$village==vilno,controls.list]
+controls.net$evcent <- evcent(net)
 
 #Remove Isolates
 if(remove.isolates==TRUE){
@@ -139,12 +141,17 @@ return(data.list)
 }
 
 # List the villages that had microfinance
-villages <- c(1,2,3,4,6,9,10,12,15,19,20,21,23,24,25,28,29,31,32,33,
-             36,37,39,41,42,43,45,46,47,48,50,51,52,55,57,59,60,62,
-             64,65,66,67,68,70,71,72,73,75,77)
+# villages <- c(1,2,3,4,6,9,10,12,15,19,20,21,23,24,25,28,29,31,32,33,
+#             36,37,39,41,42,43,45,46,47,48,50,51,52,55,57,59,60,62,
+#             64,65,66,67,68,70,71,72,73,75,77)
 
-# villages <- c(1,19,48,77)
-mcmc.list <- list(R=10000)
+#villages <- c(28,39,48,75)
+
+villages.complete <- c(28,32,33,36,37,39,42,43,45,48,
+                       50,52,55,57,64,66,67,68,
+                       70,71,72)
+#villages <- villages.complete
+villages <- c(28,32,33,36)
 
 ### Run some traditional analysis
 trad.data.matrix <- ldply(villages,
@@ -158,9 +165,7 @@ trad.data.matrix <- ldply(villages,
                           row.normalize=TRUE)
 
 ### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
-write.dta(trad.data.matrix, file='traddata.dta')
 trad.data.list <- makeDataList(trad.data.matrix,DP=FALSE)
-result.trad <- rivGibbs(Data=trad.data.list,Mcmc=mcmc.list)
 
 ### Run some traditional analysis
 binary.data.matrix <- ldply(villages,
@@ -170,13 +175,11 @@ binary.data.matrix <- ldply(villages,
                           level=level,
                           relationship='allVillageRelationships',
                           classroom.style=FALSE,
-                          within.global=FALSE,
+                          within.global=TRUE,
                           row.normalize=TRUE)
 
 ### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
-write.dta(binary.data.matrix, file='binarydata.dta')
 binary.data.list <- makeDataList(binary.data.matrix,DP=FALSE)
-result.binary <- rivGibbs(Data=binary.data.list,Mcmc=mcmc.list)
 
 ### Run some traditional analysis
 weighted.data.matrix <- ldply(villages,
@@ -186,13 +189,11 @@ weighted.data.matrix <- ldply(villages,
                             level=level,
                             relationship='allVillageWeighted',
                             classroom.style=FALSE,
-                            within.global=FALSE,
+                            within.global=TRUE,
                             row.normalize=TRUE)
 
 ### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
-write.dta(weighted.data.matrix, file='weighteddata.dta')
 weighted.data.list <- makeDataList(weighted.data.matrix,DP=FALSE)
-result.weighted <- rivGibbs(Data=weighted.data.list,Mcmc=mcmc.list)
 
 mcmcIV <- setClass('mcmcIV',
                    slots = c(bayesm='list',
@@ -209,21 +210,21 @@ extract.mcmcIV <- function(model){
   bayesm <- attributes(model)$bayesm
   
   #Combine explanatory variable results
-  mcmc.model <- cbind(bayesm$beta,bayesm$gamma)
+  #mcmc.model <- as.mcmc.list(bayesm$beta,bayesm$gamma)
   #Assign variable names
   mcmc.names <- c('Gy',colnames(attributes(model)$data.list$w))
-  colnames(mcmc.model) <- mcmc.names
+  #names(mcmc.model) <- mcmc.names
   
-  #Assign mcmc class
-  mcmc.model <- as.mcmc(mcmc.model)
-  mcmc.HPD <- HPDinterval(mcmc.model)
+  s <- rbind(summary(as.mcmc.list(bayesm$beta))$statistics,
+             summary(as.mcmc.list(bayesm$gamma))$statistics)
+  quant <- rbind(summary(as.mcmc.list(bayesm$beta))$quantiles,
+                 summary(as.mcmc.list(bayesm$gamma))$quantiles)
   
-  s <- summary(mcmc.model)
-  names <- colnames(mcmc.model)
-  co <- s$statistics[,'Mean']
-  se <- s$statistics[,'SD']
-  ci.low <- mcmc.HPD[,"lower"]
-  ci.up <- mcmc.HPD[,"upper"]
+  names <- mcmc.names
+  co <- s[,'Mean']
+  se <- s[,'SD']
+  ci.low <- quant[,'2.5%']
+  ci.up <- quant[,'97.5%']
   
   n <- length(attributes(model)$data.list$y) 
   gof <- c(n)  
@@ -248,14 +249,54 @@ setMethod('extract',
           signature = className('mcmcIV'),
           definition = extract.mcmcIV)
 
-### Make into a table
-model.trad <- mcmcIV(bayesm=result.trad,data.list=trad.data.list)
-model.trad.table <- extract(model.trad)
+workers <- makeCluster(2)
+registerDoSNOW(workers)
 
-model.binary <- mcmcIV(bayesm=result.binary,data.list=binary.data.list)
-model.binary.table <- extract(model.binary)
+runs <- 4
+mcmc.param <- list(R=11000)
+tic()
+parallel <- foreach(i=1:runs,.packages='bayesm') %dopar% rivGibbs(Data=binary.data.list,
+                                           Mcmc=mcmc.param)
+parallel.DP <- foreach(i=1:runs,.packages='bayesm') %dopar% rivGibbs(Data=binary.data.list,
+                                                                  Mcmc=mcmc.param)
+toc()
+stopCluster(workers)
 
-model.weighted <- mcmcIV(bayesm=result.weighted,data.list=weighted.data.list)
-model.weighted.table <- extract(model.weighted)
+extractParallel <- function(parallel){
+betas <- vector(mode='list',length=runs)
+gammas <- vector(mode='list',length=runs)
+deltas <- vector(mode='list',length=runs)
+Istars <- vector(mode='list',length=runs)
+for(i in 1:runs){
+  betas[[i]] <- parallel[[i]]$beta
+  gammas[[i]] <- parallel[[i]]$gamma
+  deltas[[i]] <- parallel[[i]]$delta
+  if(!is.null(parallel[[i]]$Istar)) Istars[[i]] <- as.mcmc(parallel[[i]]$Istar)
+}
+result <- list(deltadraw=mcmc.list(deltas),
+               betadraw=mcmc.list(betas),
+               gammadraw=mcmc.list(gammas),
+               if(is.null(Istars[[1]])) Istar=NULL else Istar=mcmc.list(Istars))
+return(result)
+}
 
-screenreg(list(model.trad.table,model.binary.table,model.weighted.table),ci.force=TRUE,digits=3)
+result <- extractParallel(parallel)
+result.DP <- extractParalle(parallel.DP)
+
+model.parallel <- mcmcIV(bayesm=result,data.list=binary.data.list)
+model.parallel.table <- extract(model.parallel)
+
+model.parallel.DP <- mcmcIV(bayesm=result.DP,data.list=binary.data.list)
+model.parallel.DP.table <- extract(model.parallel.DP)
+
+# ### Make into a table
+# model.trad <- mcmcIV(bayesm=result.trad,data.list=trad.data.list)
+# model.trad.table <- extract(model.trad)
+# 
+# model.binary <- mcmcIV(bayesm=result.binary,data.list=binary.data.list)
+# model.binary.table <- extract(model.binary)
+# 
+# model.weighted <- mcmcIV(bayesm=result.weighted,data.list=weighted.data.list)
+# model.weighted.table <- extract(model.weighted)
+
+screenreg(list(model.parallel.table,model.parallel.DP.table),ci.force=TRUE,digits=3)

@@ -1,5 +1,6 @@
 #Clean the Data
 library(foreign)
+library(doSNOW)
 library(bayesm)
 library(foreach)
 library(plyr)
@@ -17,7 +18,7 @@ if(.Platform$OS.type=="windows"){
 
 level <- '_HH_' #two options household ('HH') and individual ('')
 #relationship <- 'allVillageWeighted' #multiple options, see the documentation
-#relationship <- 'allVillageWeighted' #multiple options, see the documentation
+relationship <- 'allVillageRelationships' #multiple options, see the documentation
 
 ### Load the control variables
 # May need to do some merging of controls from the individual level file
@@ -69,6 +70,7 @@ participation <- read.csv(file=paste('./DiffusionOfMicrofinance/MatlabReplicatio
                           header=FALSE)
 
 controls.net <- controls[controls$village==vilno,controls.list]
+controls.net$evcent <- evcent(net)
 
 #Remove Isolates
 if(remove.isolates==TRUE){
@@ -139,12 +141,18 @@ return(data.list)
 }
 
 # List the villages that had microfinance
-villages <- c(1,2,3,4,6,9,10,12,15,19,20,21,23,24,25,28,29,31,32,33,
-             36,37,39,41,42,43,45,46,47,48,50,51,52,55,57,59,60,62,
-             64,65,66,67,68,70,71,72,73,75,77)
+# villages <- c(1,2,3,4,6,9,10,12,15,19,20,21,23,24,25,28,29,31,32,33,
+#             36,37,39,41,42,43,45,46,47,48,50,51,52,55,57,59,60,62,
+#             64,65,66,67,68,70,71,72,73,75,77)
 
-# villages <- c(1,19,48,77)
-mcmc.list <- list(R=10000)
+#villages <- c(28,39,48,75)
+
+villages.complete <- c(28,32,33,36,37,39,42,43,45,48,
+                       50,52,55,57,64,66,67,68,
+                       70,71,72)
+villages <- villages.complete
+
+mcmc.param <- list(R=10000)
 
 ### Run some traditional analysis
 trad.data.matrix <- ldply(villages,
@@ -160,7 +168,7 @@ trad.data.matrix <- ldply(villages,
 ### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
 write.dta(trad.data.matrix, file='traddata.dta')
 trad.data.list <- makeDataList(trad.data.matrix,DP=FALSE)
-result.trad <- rivGibbs(Data=trad.data.list,Mcmc=mcmc.list)
+result.trad <- rivGibbs(Data=trad.data.list,Mcmc=mcmc.param)
 
 ### Run some traditional analysis
 binary.data.matrix <- ldply(villages,
@@ -176,7 +184,7 @@ binary.data.matrix <- ldply(villages,
 ### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
 write.dta(binary.data.matrix, file='binarydata.dta')
 binary.data.list <- makeDataList(binary.data.matrix,DP=FALSE)
-result.binary <- rivGibbs(Data=binary.data.list,Mcmc=mcmc.list)
+result.binary <- rivGibbs(Data=binary.data.list,Mcmc=mcmc.param)
 
 ### Run some traditional analysis
 weighted.data.matrix <- ldply(villages,
@@ -192,7 +200,7 @@ weighted.data.matrix <- ldply(villages,
 ### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
 write.dta(weighted.data.matrix, file='weighteddata.dta')
 weighted.data.list <- makeDataList(weighted.data.matrix,DP=FALSE)
-result.weighted <- rivGibbs(Data=weighted.data.list,Mcmc=mcmc.list)
+result.weighted <- rivGibbs(Data=weighted.data.list,Mcmc=mcmc.param)
 
 mcmcIV <- setClass('mcmcIV',
                    slots = c(bayesm='list',
@@ -259,3 +267,32 @@ model.weighted <- mcmcIV(bayesm=result.weighted,data.list=weighted.data.list)
 model.weighted.table <- extract(model.weighted)
 
 screenreg(list(model.trad.table,model.binary.table,model.weighted.table),ci.force=TRUE,digits=3)
+
+### Binary data list
+
+workers <- makeCluster(2)
+registerDoSNOW(workers)
+
+runs <- 4
+asdf <- foreach(i=1:runs,.packages='bayesm') %dopar% rivGibbs(Data=binary.data.list,
+                                           Mcmc=mcmc.param)
+stopCluster(workers)
+
+betas <- vector(mode='list',length=runs)
+gammas <- vector(mode='list',length=runs)
+deltas <- vector(mode='list',length=runs)
+Istars <- vector(mode='list',length=runs)
+for(i in 1:runs){
+  betas[[i]] <- asdf[[i]]$beta
+  gammas[[i]] <- asdf[[i]]$gamma
+  deltas[[i]] <- asdf[[i]]$delta
+  if(!is.null(asdf[[i]]$Istar)) Istars[[i]] <- as.mcmc(asdf[[i]]$Istar)
+}
+result <- list(deltadraw=mcmc.list(deltas),
+               betadraw=mcmc.list(betas),
+               gammadraw=mcmc.list(gammas),
+               if(is.null(Istars[[1]])) Istar=NULL else Istar=mcmc.list(Istars))
+
+model.parallel <- mcmcIV(bayesm=result,data.list=weighted.data.list)
+model.parallel.table <- extract(model.parallel)
+
