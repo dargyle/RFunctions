@@ -6,6 +6,7 @@ library(foreach)
 library(plyr)
 require(texreg)
 library(statnet)
+library(coda)
 #source(ProcessBayesm.r)
 
 
@@ -165,7 +166,7 @@ trad.data.matrix <- ldply(villages,
                           row.normalize=TRUE)
 
 ### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
-trad.data.list <- makeDataList(trad.data.matrix,DP=FALSE)
+trad.data.list <- makeDataList(trad.data.matrix,DP=TRUE)
 
 ### Run some traditional analysis
 binary.data.matrix <- ldply(villages,
@@ -179,7 +180,7 @@ binary.data.matrix <- ldply(villages,
                           row.normalize=TRUE)
 
 ### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
-binary.data.list <- makeDataList(binary.data.matrix,DP=FALSE)
+binary.data.list <- makeDataList(binary.data.matrix,DP=TRUE)
 
 ### Run some traditional analysis
 weighted.data.matrix <- ldply(villages,
@@ -193,7 +194,7 @@ weighted.data.matrix <- ldply(villages,
                             row.normalize=TRUE)
 
 ### IMPORTANT: rivGibbs requires an intercept (unless I demean it), rivDP does not
-weighted.data.list <- makeDataList(weighted.data.matrix,DP=FALSE)
+weighted.data.list <- makeDataList(weighted.data.matrix,DP=TRUE)
 
 mcmcIV <- setClass('mcmcIV',
                    slots = c(bayesm='list',
@@ -249,7 +250,7 @@ setMethod('extract',
           signature = className('mcmcIV'),
           definition = extract.mcmcIV)
 
-workers <- makeCluster(2)
+workers <- makeCluster(4)
 registerDoSNOW(workers)
 
 runs <- 4
@@ -257,7 +258,9 @@ mcmc.param <- list(R=11000)
 tic()
 parallel <- foreach(i=1:runs,.packages='bayesm') %dopar% rivGibbs(Data=binary.data.list,
                                            Mcmc=mcmc.param)
-parallel.DP <- foreach(i=1:runs,.packages='bayesm') %dopar% rivGibbs(Data=binary.data.list,
+toc()
+tic()
+parallel.DP <- foreach(i=1:runs,.packages='bayesm') %dopar% rivDP(Data=binary.data.list,
                                                                   Mcmc=mcmc.param)
 toc()
 stopCluster(workers)
@@ -281,7 +284,7 @@ return(result)
 }
 
 result <- extractParallel(parallel)
-result.DP <- extractParalle(parallel.DP)
+result.DP <- extractParallel(parallel.DP)
 
 model.parallel <- mcmcIV(bayesm=result,data.list=binary.data.list)
 model.parallel.table <- extract(model.parallel)
