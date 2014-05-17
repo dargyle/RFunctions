@@ -5,8 +5,7 @@ library(bayesm)
 library(foreach)
 library(plyr)
 require(texreg)
-require(AER)
-source("./TicToc.r")
+library(statnet)
 #source(ProcessBayesm.r)
 
 
@@ -15,6 +14,7 @@ if(.Platform$OS.type=="windows"){
   } else {
   setwd('/home/daniel/Copy/MicrofinanceNetworks/')
 }
+source("./TicToc.r")
 
 level <- '_HH_' #two options household ('HH') and individual ('')
 #relationship <- 'allVillageWeighted' #multiple options, see the documentation
