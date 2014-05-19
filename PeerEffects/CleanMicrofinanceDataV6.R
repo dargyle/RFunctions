@@ -151,8 +151,8 @@ return(data.list)
 villages.complete <- c(28,32,33,36,37,39,42,43,45,48,
                        50,52,55,57,64,66,67,68,
                        70,71,72)
-#villages <- villages.complete
-villages <- c(28,32,33,36)
+villages <- villages.complete
+#villages <- c(28,32,33,36)
 
 ### Run some traditional analysis
 trad.data.matrix <- ldply(villages,
@@ -254,7 +254,7 @@ workers <- makeCluster(4)
 registerDoSNOW(workers)
 
 runs <- 4
-mcmc.param <- list(R=11000)
+mcmc.param <- list(R=20000)
 tic()
 parallel <- foreach(i=1:runs,.packages='bayesm') %dopar% rivGibbs(Data=binary.data.list,
                                            Mcmc=mcmc.param)
@@ -303,3 +303,9 @@ model.parallel.DP.table <- extract(model.parallel.DP)
 # model.weighted.table <- extract(model.weighted)
 
 screenreg(list(model.parallel.table,model.parallel.DP.table),ci.force=TRUE,digits=3)
+texreg(list(model.parallel.table,model.parallel.DP.table),
+       file='bayesian.tex',
+       ci.force=TRUE,
+       digits=3,
+       caption='Bayesian Estimation',
+       caption.above=TRUE)
