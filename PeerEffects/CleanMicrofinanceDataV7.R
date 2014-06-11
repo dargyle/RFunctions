@@ -17,14 +17,14 @@ if(.Platform$OS.type=="windows"){
 }
 source("./TicToc.r")
 
-level <- '_HH_' #two options household ('HH') and individual ('')
+level <- '_HH_' #two options household ('HH') and individual ('_')
 #relationship <- 'allVillageWeighted' #multiple options, see the documentation
 relationship <- 'allVillageRelationships' #multiple options, see the documentation
 
 ### Load the control variables
 # May need to do some merging of controls from the individual level file
 controls <- read.dta('./DiffusionOfMicrofinance/Data/DemographicsAndOutcomes/household_characteristics2.dta') 
-controls.list <- c('leader','room_no','bed_no','hhSurveyed','noelectricity','nolatrine','GMorOBC')
+controls.list <- c('leader','room_no','bed_no','hhSurveyed','noelectricity','nolatrine','GMorOBC','tileroof')
 
 ### Function that takes in a village number, a matrix of whole sample controls,
 ### a network level (household or individual), a type of network relatiosnhip,
@@ -77,7 +77,7 @@ rownames(controls.net) <- ids
 #Remove Isolates
 G <- net
 if(remove.isolates==TRUE){
-  isolates <- !rowSums(net)==0
+  isolates <- !(rowSums(net)==0)
   ids <- ids[isolates]
   G <- as.matrix(G[isolates,isolates])
   y <- as.vector(t(participation)[isolates])
@@ -174,7 +174,40 @@ binary.stata <- ldply(villages,
                           classroom.style=FALSE,
                           within.global=FALSE,
                           row.normalize=FALSE)
-write.dta(binary.stata,file='binarydatastar_all.dta')
+write.dta(binary.stata,file='binarydatastar_all_roof.dta')
+
+weighted.stata <- ldply(villages,
+                      makeData,
+                      controls=controls,
+                      controls.list=controls.list,
+                      level=level,
+                      relationship='allVillageWeighted',
+                      classroom.style=FALSE,
+                      within.global=FALSE,
+                      row.normalize=FALSE)
+write.dta(weighted.stata,file='binarydatastar_all_weighted.dta')
+
+binary.stata.female <- ldply(villages,
+                      makeData,
+                      controls=controls,
+                      controls.list=controls.list,
+                      level=level,
+                      relationship='allVillageRelationshipsFemale',
+                      classroom.style=FALSE,
+                      within.global=FALSE,
+                      row.normalize=FALSE)
+write.dta(binary.stata.female,file='binarydatastar_all_female.dta')
+
+binary.stata.male <- ldply(villages,
+                             makeData,
+                             controls=controls,
+                             controls.list=controls.list,
+                             level=level,
+                             relationship='allVillageRelationshipsMale',
+                             classroom.style=FALSE,
+                             within.global=FALSE,
+                             row.normalize=FALSE)
+write.dta(binary.stata.male,file='binarydatastar_all_male.dta')
 
 weighted.stata <- ldply(villages,
                       makeData,
