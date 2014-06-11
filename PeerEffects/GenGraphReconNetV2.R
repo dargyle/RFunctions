@@ -10,13 +10,14 @@ if(.Platform$OS.type=="windows"){
 }
 source("./TicToc.r")
 
-#foreach network in villages.complete <- c(28,32,33,36,37,39,42,43,45,48,
-#50,52,55,57,64,66,67,68,
-#70,71,72)
+villages.complete <- c(28,32,33,36,37,39,42,43,45,48,
+50,52,55,57,64,66,67,68,
+70,71,72)
 
-#Foreach run in A-D
+workers <- makeCluster(4)
+registerDoSNOW(workers)
 
-foreach(i=1:num.sims,.packages=c('statnet','abind')) %dopar% {
+foreach(village=villages.complete,.packages=c('statnet','abind')) %dopar% {
 
 for(run in LETTERS[1:4]){
   load(paste0("G:/Copy/MicrofinanceNetworks/Simulations/",run,village,"sims.Rdata"))
@@ -55,3 +56,5 @@ write.table(prob.mat,file=paste('./DiffusionOfMicrofinance/Data/NetworkData/',
             qmethod='double')
 
 }
+
+stopCluster(workers)
